@@ -1,0 +1,17 @@
+gs_ply
+gs_ply/
+xiaomi_ply
+xiaomi_ply/
+*/__pycache__/
+*.pyc
+.DS_Store
+.vscode/
+.idea/
+.env
+.env.local
+.env.*.local
+*.tar.gz
+*.zip
+logs/
+*.tar.xz
+*.log
