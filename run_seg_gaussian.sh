@@ -3,8 +3,9 @@
 # 使用方法: 
 #   ./run_segment.sh washing area_weighted 0.8
 #   ./run_segment.sh washing intersection
-source ~/anaconda3/etc/profile.d/conda.sh
-conda activate drawer_sdf
+# source ~/anaconda3/etc/profile.d/conda.sh
+# conda activate drawer_sdf
+
 if [ -z "$1" ]; then
     echo "用法: $0 <object_name> [mode] [vote_threshold]"
     echo "示例: $0 washing"
@@ -48,9 +49,9 @@ CMD="python gs2colmap/segment_gaussian.py \
     --output $OUTPUT_FILE \
     --mode $MODE \
     --save-inverse \
-    --core-threshold 0.6 \
-    --edge-threshold 0.2 \
-    --connectivity-radius 0.02 \
+    --core-threshold 0.5 \
+    --edge-threshold 0.05 \
+    --connectivity-radius 0.1 \
     --restore-attributes"
 
 # 如果是vote模式，添加vote-threshold参数

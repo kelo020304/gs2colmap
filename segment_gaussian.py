@@ -348,8 +348,8 @@ def main():
                        help="只保留最大连通域（默认开启）")
     parser.add_argument("--no-keep-largest", dest="keep_largest_only", action="store_false",
                        help="不过滤连通域，保留所有点")
-    parser.add_argument("--cluster-eps", type=float, default=0.03,
-                       help="DBSCAN聚类半径(米), 默认3cm")
+    parser.add_argument("--cluster-eps", type=float, default=0.02,
+                       help="DBSCAN聚类半径(米), 默认2cm")
     parser.add_argument("--cluster-min-samples", type=int, default=10,
                        help="DBSCAN最小样本数, 默认10")
     
