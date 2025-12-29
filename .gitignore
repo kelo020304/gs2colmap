@@ -15,3 +15,5 @@ xiaomi_ply/
 logs/
 *.tar.xz
 *.log
+ply_data/
+ply_data

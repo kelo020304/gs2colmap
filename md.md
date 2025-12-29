@@ -1,19 +1,43 @@
 python gs2colmap/select_object.py \
-    --ply gs2colmap/xiaomi_ply/point_cloud_seg_res.ply \
-    --output gs2colmap/xiaomi_ply/trajectory.json
+    --ply /home/jiziheng/Music/IROS2026/DRAWER/gs2colmap/ply_data/microwave/microwave.ply \
+    --output /home/jiziheng/Music/IROS2026/DRAWER/gs2colmap/ply_data/microwave/traj.json
+
+python gs2colmap/render.py \
+    --ply /home/jiziheng/Music/IROS2026/DRAWER/gs2colmap/ply_data/microwave/microwave.ply \
+    --trajectory /home/jiziheng/Music/IROS2026/DRAWER/gs2colmap/ply_data/microwave/traj.json \
+    --output /home/jiziheng/Music/IROS2026/DRAWER/gs2colmap/ply_data/microwave \
+    --width 640 \
+    --height 480 \
+    --fovy 65.0
+
+python gs2colmap/sam3_video_debug.py gs2colmap/ply_data/microwave/images -o gs2colmap/ply_data/microwave/sam_results \
+    --prompt "washing machine door" \
+    --start-frame 13 
+
+
+python sam3_video_debug.py images -o results \
+    --prompt " door" 
+
+python gs2colmap/segment_gaussian.py \
+    --ply /home/jiziheng/Music/IROS2026/DRAWER/gs2colmap/ply_data/washing/washing.ply \
+    --masks /home/jiziheng/Music/IROS2026/DRAWER/gs2colmap/ply_data/washing/sam_results/masks \
+    --transforms /home/jiziheng/Music/IROS2026/DRAWER/gs2colmap/ply_data/washing/transforms.json \
+    --output /home/jiziheng/Music/IROS2026/DRAWER/gs2colmap/ply_data/washing/washing_seg.ply \
+    --mode vote --vote-threshold 0.8 
+    # --mode intersection
+    
+python gs2colmap/render.py \
+     --ply /home/jiziheng/Music/IROS2026/DRAWER/gs2colmap/ply_data/washing/washing.ply \
+     --trajectory /home/jiziheng/Music/IROS2026/DRAWER/gs2colmap/ply_data/washing/traj \
+     --output /home/jiziheng/Music/IROS2026/DRAWER/gs2colmap/ply_data/washing \
+    --fovy 65.0
 
 python gs2colmap/select_object.py \
     --ply gs2colmap/gs_ply/point_cloud.ply \
     --output gs2colmap/gs_ply/trajectory.json
 
 
-python gs2colmap/render.py \
-    --ply gs2colmap/xiaomi_ply/point_cloud_seg_res.ply \
-    --trajectory gs2colmap/xiaomi_ply/trajectory.json \
-    --output gs2colmap/xiaomi_ply/processed_data_2 \
-    --width 640 \
-    --height 480 \
-    --fovy 65.0
+
 
 python gs2colmap/render.py \
     --ply gs2colmap/gs_ply/point_cloud.ply \

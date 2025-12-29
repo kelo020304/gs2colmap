@@ -393,11 +393,11 @@ def main():
                        help="点云 PLY 文件")
     parser.add_argument("--output", type=str, default="gs2colmap/trajectory.json",
                        help="输出轨迹文件")
-    parser.add_argument("--num-views", type=int, default=1000,
+    parser.add_argument("--num-views", type=int, default=20,
                        help="视角数量")
     parser.add_argument("--radius", type=float, default=2.0,
                        help="环绕半径（米）")
-    parser.add_argument("--height", type=float, default=0.3,
+    parser.add_argument("--height", type=float, default=0.1,
                        help="相机高度偏移（米）")
     parser.add_argument("--start-angle", type=float, default=0.0,
                        help="起始角度（度），0=前方, 90=左侧, 180=后方, 270=右侧")
