@@ -167,9 +167,9 @@ class GaussianSegmenter:
     def get_segmented_points(self, 
                             core_threshold=0.7,
                             edge_threshold=0.3,
-                            connectivity_radius=0.02,
+                            connectivity_radius=0.05,
                             keep_largest_only=True,
-                            cluster_eps=0.03,
+                            cluster_eps=0.1,
                             cluster_min_samples=10):
         """
         分区域自适应阈值 + 只保留最大连通域
