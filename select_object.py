@@ -22,7 +22,9 @@ class InteractiveTrajectoryGenerator:
     
     def __init__(self, pcd_path, output_path="trajectory.json",
                  radius=1.0, height_offset=0.3, num_views=50,
-                 clockwise=True, start_angle_deg=0.0):
+                 clockwise=True, start_angle_deg=0.0,
+                 elevation_min_deg=15.0, elevation_max_deg=15.0,
+                 elevation_bands=1):
         self.pcd_path = pcd_path
         self.output_path = self._normalize_output_path(output_path)
         
@@ -37,7 +39,9 @@ class InteractiveTrajectoryGenerator:
         self.radius = radius
         self.height_offset = height_offset
         self.num_views = num_views
-        self.elevation_deg = 15.0
+        self.elevation_min_deg = elevation_min_deg
+        self.elevation_max_deg = elevation_max_deg
+        self.elevation_bands = max(1, elevation_bands)
         self.start_angle_deg = start_angle_deg
         self.clockwise = clockwise
         
@@ -87,18 +91,31 @@ class InteractiveTrajectoryGenerator:
         start_angle = np.radians(self.start_angle_deg)
         direction = -1 if self.clockwise else 1
         
-        for i in range(self.num_views):
-            theta = start_angle + direction * angle_range * i / self.num_views
-            
-            x = self.center[0] + self.radius * np.cos(theta)
-            y = self.center[1] + self.radius * np.sin(theta)
-            z = self.center[2] + self.height_offset + self.radius * np.sin(np.radians(self.elevation_deg))
-            
-            camera_pos = np.array([x, y, z])
-            look_at = self.center.copy()
-            
-            c2w = self.create_mujoco_c2w(camera_pos, look_at)
-            poses.append(c2w)
+        elevations = np.linspace(
+            self.elevation_min_deg,
+            self.elevation_max_deg,
+            self.elevation_bands
+        )
+        views_per_band = max(1, int(np.ceil(self.num_views / self.elevation_bands)))
+        
+        for band_idx, elev_deg in enumerate(elevations):
+            if len(poses) >= self.num_views:
+                break
+            band_phase = (np.pi / self.elevation_bands) * band_idx
+            for i in range(views_per_band):
+                if len(poses) >= self.num_views:
+                    break
+                theta = start_angle + direction * angle_range * i / views_per_band + band_phase
+                
+                x = self.center[0] + self.radius * np.cos(theta)
+                y = self.center[1] + self.radius * np.sin(theta)
+                z = self.center[2] + self.height_offset + self.radius * np.sin(np.radians(elev_deg))
+                
+                camera_pos = np.array([x, y, z])
+                look_at = self.center.copy()
+                
+                c2w = self.create_mujoco_c2w(camera_pos, look_at)
+                poses.append(c2w)
         
         return np.array(poses)
     
@@ -323,6 +340,8 @@ class InteractiveTrajectoryGenerator:
         print(f"  视角数: {self.num_views}")
         print(f"  旋转方向: {'顺时针' if self.clockwise else '逆时针'}")
         print(f"  起始角度: {self.start_angle_deg}°")
+        print(f"  仰角范围: {self.elevation_min_deg}° ~ {self.elevation_max_deg}°")
+        print(f"  仰角圈数: {self.elevation_bands}")
         print("=" * 70)
         if auto_center:
             points = np.asarray(self.pcd.points)
@@ -410,13 +429,21 @@ def main():
                        help="点云 PLY 文件")
     parser.add_argument("--output", type=str, default="gs2colmap/trajectory.json",
                        help="输出轨迹文件")
-    parser.add_argument("--num-views", type=int, default=20,
+    parser.add_argument("--num-views", type=int, default=40,
                        help="视角数量")
-    parser.add_argument("--radius", type=float, default=2.0,
+    parser.add_argument("--radius", type=float, default=1.0,
                        help="环绕半径（米）")
     parser.add_argument("--height", type=float, default=0.1,
                        help="相机高度偏移（米）")
-    parser.add_argument("--start-angle", type=float, default=270.0,
+    parser.add_argument("--elevation", type=float, default=45.0,
+                       help="单圈仰角（度），默认45")
+    parser.add_argument("--elevation-min", type=float, default=None,
+                       help="仰角下限（度），用于多圈")
+    parser.add_argument("--elevation-max", type=float, default=None,
+                       help="仰角上限（度），用于多圈")
+    parser.add_argument("--elevation-bands", type=int, default=1,
+                       help="仰角圈数（>1 表示多圈轨迹）")
+    parser.add_argument("--start-angle", type=float, default=300,
                        help="起始角度（度），0=前方, 90=左侧, 180=后方, 270=右侧")
     parser.add_argument("--counterclockwise", action="store_true",
                        help="逆时针旋转（默认顺时针）")
@@ -440,7 +467,10 @@ def main():
         height_offset=args.height,
         num_views=args.num_views,
         clockwise=not args.counterclockwise,
-        start_angle_deg=args.start_angle
+        start_angle_deg=args.start_angle,
+        elevation_min_deg=args.elevation if args.elevation_min is None else args.elevation_min,
+        elevation_max_deg=args.elevation if args.elevation_max is None else args.elevation_max,
+        elevation_bands=args.elevation_bands,
     )
     
     generator.width = args.width

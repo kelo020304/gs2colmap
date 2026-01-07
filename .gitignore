@@ -17,3 +17,5 @@ logs/
 *.log
 ply_data/
 ply_data
+assets
+assets/

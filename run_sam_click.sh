@@ -18,7 +18,7 @@ OBJECT_NAME="$1"
 PROMPT="$2"
 START_FRAME="$3"  # 可选参数
 
-BASE_DIR="/home/cfy/cfy/ccc/gs_robot_world/src/gs_robot_world/assets/object_assets"
+BASE_DIR="/home/jiziheng/Music/IROS2026/gs2colmap/assets/object_assets"
 OBJECT_DIR="${BASE_DIR}/${OBJECT_NAME}/render_output"
 IMAGES_DIR="${OBJECT_DIR}/images"
 OUTPUT_DIR="${OBJECT_DIR}/sam_results"

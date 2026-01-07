@@ -19,8 +19,8 @@ OBJECT_NAME="$1"
 VOTE_THRESHOLD="${2:-0.5}"  # 默认0.5
 EXTRA_ARGS="${@:3}"  # 第3个参数开始的所有额外参数
 
-BASE_DIR="/home/jiziheng/Music/IROS2026/DRAWER/gs2colmap/ply_data"
-OBJECT_DIR="${BASE_DIR}/${OBJECT_NAME}"
+BASE_DIR="/home/jiziheng/Music/IROS2026/gs2colmap/assets/object_assets"
+OBJECT_DIR="${BASE_DIR}/${OBJECT_NAME}/render_output"
 PLY_FILE="${OBJECT_DIR}/${OBJECT_NAME}.ply"
 MASKS_DIR="${OBJECT_DIR}/sam_results/masks"
 TRANSFORMS_FILE="${OBJECT_DIR}/transforms.json"

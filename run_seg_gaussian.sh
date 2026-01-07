@@ -7,20 +7,19 @@
 # conda activate drawer_sdf
 
 if [ -z "$1" ]; then
-    echo "用法: $0 <object_name> [mode] [vote_threshold]"
+    echo "用法: $0 <object_name> [mode]"
     echo "示例: $0 washing"
-    echo "示例: $0 washing area_weighted 0.6"
-    echo "示例: $0 washing adaptive"
+    echo "示例: $0 washing area_weighted"
+    echo "示例: $0 washing intersection"
     exit 1
 fi
 
 OBJECT_NAME="$1"
 MODE="${2:-vote}"  # 默认vote模式
-VOTE_THRESHOLD="${3:-0.8}"  # 默认0.8
 
-BASE_DIR="/home/jiziheng/Music/IROS2026/DRAWER/gs2colmap/ply_data"
-OBJECT_DIR="${BASE_DIR}/${OBJECT_NAME}"
-PLY_FILE="${OBJECT_DIR}/${OBJECT_NAME}.ply"
+BASE_DIR="/home/jiziheng/Music/IROS2026/gs2colmap/assets/object_assets"
+OBJECT_DIR="${BASE_DIR}/${OBJECT_NAME}/render_output"
+PLY_FILE="${BASE_DIR}/${OBJECT_NAME}/rec_3d/${OBJECT_NAME}/${OBJECT_NAME}.ply"
 MASKS_DIR="${OBJECT_DIR}/sam_results/masks"
 TRANSFORMS_FILE="${OBJECT_DIR}/transforms.json"
 OUTPUT_FILE="${OBJECT_DIR}/${OBJECT_NAME}_seg.ply"
@@ -42,22 +41,15 @@ if [ ! -f "$TRANSFORMS_FILE" ]; then
 fi
 
 # 构建命令
-CMD="python gs2colmap/segment_gaussian.py \
+CMD="python segment_gaussian.py \
     --ply $PLY_FILE \
     --masks $MASKS_DIR \
     --transforms $TRANSFORMS_FILE \
     --output $OUTPUT_FILE \
     --mode $MODE \
     --save-inverse \
-    --core-threshold 0.5 \
-    --edge-threshold 0.05 \
-    --connectivity-radius 0.1 \
+    --core-threshold 0.4 \
     --restore-attributes"
-
-# 如果是vote模式，添加vote-threshold参数
-if [ "$MODE" = "vote" ]; then
-    CMD="$CMD --vote-threshold $VOTE_THRESHOLD"
-fi
 
 # 执行命令
 echo "========================================"
@@ -65,9 +57,6 @@ echo "分割Gaussian点云"
 echo "========================================"
 echo "物体: $OBJECT_NAME"
 echo "模式: $MODE"
-if [ "$MODE" = "vote" ]; then
-    echo "投票阈值: $VOTE_THRESHOLD"
-fi
 echo "输出文件: $OUTPUT_FILE"
 echo ""
 

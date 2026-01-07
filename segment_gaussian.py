@@ -12,8 +12,6 @@ import cv2
 from argparse import ArgumentParser
 from plyfile import PlyData, PlyElement
 import open3d as o3d
-from scipy.spatial import cKDTree
-from sklearn.cluster import DBSCAN
 from gaussian_restore import GaussianAttributeRestorer
 
 class GaussianSegmenter:
@@ -58,9 +56,6 @@ class GaussianSegmenter:
         # 统计信息
         self.mask_areas = []
         
-        # 构建KD-Tree（用于连通性检查）
-        print("构建KD-Tree...")
-        self.kdtree = cKDTree(self.positions)
     
     def project_points(self, c2w, fx, fy, cx, cy, width, height):
         """将3D点投影到2D图像"""
@@ -98,6 +93,7 @@ class GaussianSegmenter:
         valid_mask = valid_depth & in_image
         
         return pixel_coords, valid_mask
+
     
     def mark_with_mask(self, mask, c2w, fx, fy, cx, cy):
         """用一个mask标记3D点"""
@@ -138,6 +134,7 @@ class GaussianSegmenter:
         
         self.total_views += 1
         return frame_mask_points.sum()
+
     
     def visualize_result(self, selected_indices, title="Segmentation Result"):
         """可视化最终分割结果"""
@@ -164,148 +161,22 @@ class GaussianSegmenter:
             point_show_normal=False
         )
     
-    def get_segmented_points(self, 
-                            core_threshold=0.7,
-                            edge_threshold=0.3,
-                            connectivity_radius=0.05,
-                            keep_largest_only=True,
-                            cluster_eps=0.1,
-                            cluster_min_samples=10):
-        """
-        分区域自适应阈值 + 只保留最大连通域
-        
-        Args:
-            core_threshold: 核心区域阈值（高）
-            edge_threshold: 边缘区域阈值（低）
-            connectivity_radius: 连通性半径（米）
-            keep_largest_only: 是否只保留最大连通域
-            cluster_eps: DBSCAN聚类半径
-            cluster_min_samples: DBSCAN最小样本数
-        """
+    def get_segmented_points(self, core_threshold=0.3):
+        """简单阈值分割"""
         print(f"\n{'='*70}")
-        print(f"提取分割结果 - 分区域自适应")
+        print(f"提取分割结果")
         print(f"{'='*70}")
         print(f"处理视角数: {self.total_views}")
         
-        if len(self.mask_areas) > 0:
-            avg_area = np.mean(self.mask_areas)
-            print(f"平均Mask面积: {avg_area*100:.1f}%")
-        
-        # 计算综合分数
-        vote_ratio = self.vote_count / max(self.total_views, 1)
-        
-        if self.mode == 'area_weighted':
-            max_weighted = self.weighted_vote.max()
-            if max_weighted > 0:
-                weight_ratio = self.weighted_vote / max_weighted
-            else:
-                weight_ratio = np.zeros_like(self.weighted_vote)
-            
-            combined_score = vote_ratio * 0.6 + weight_ratio * 0.4
+        if self.mode == 'intersection':
+            selected_indices = np.where(self.intersection_mask)[0]
         else:
-            combined_score = vote_ratio
+            combined_score = _compute_combined_score(self)
+            selected_indices = np.where(combined_score >= core_threshold)[0]
         
-        # Step 1: 选择核心区域（高阈值，高置信度）
-        core_mask = combined_score >= core_threshold
-        core_indices = np.where(core_mask)[0]
-        
-        print(f"\n核心阈值: {core_threshold * 100:.0f}%")
-        print(f"核心点数: {len(core_indices):,}")
-        
-        if len(core_indices) == 0:
-            print("❌ 警告: 没有核心点！尝试降低core_threshold")
-            return np.array([], dtype=np.int64)
-        
-        # Step 2: 选择边缘候选点（低阈值）
-        edge_candidate_mask = (combined_score >= edge_threshold) & (combined_score < core_threshold)
-        edge_candidate_indices = np.where(edge_candidate_mask)[0]
-        
-        print(f"\n边缘阈值: {edge_threshold * 100:.0f}%")
-        print(f"边缘候选点数: {len(edge_candidate_indices):,}")
-        
-        # Step 3: 边缘点必须邻近核心点（连通性约束）
-        if len(edge_candidate_indices) > 0:
-            print(f"\n检查边缘点连通性 (半径={connectivity_radius*100:.1f}cm)...")
-            
-            # 查询每个边缘候选点到核心点的最近距离
-            core_positions = self.positions[core_indices]
-            core_tree = cKDTree(core_positions)
-            
-            distances, _ = core_tree.query(self.positions[edge_candidate_indices])
-            
-            # 保留距离核心点足够近的边缘点
-            valid_edge_mask = distances < connectivity_radius
-            valid_edge_indices = edge_candidate_indices[valid_edge_mask]
-            
-            print(f"有效边缘点数: {len(valid_edge_indices):,}")
-        else:
-            valid_edge_indices = np.array([], dtype=np.int64)
-        
-        # Step 4: 合并核心点和有效边缘点
-        selected_indices = np.concatenate([core_indices, valid_edge_indices])
-        selected_indices = np.unique(selected_indices)
-        
-        print(f"\n初步选中点数: {len(selected_indices):,} / {self.num_points:,} "
+        print(f"\n阈值: {core_threshold * 100:.0f}%")
+        print(f"选中点数: {len(selected_indices):,} / {self.num_points:,} "
               f"({len(selected_indices) / self.num_points * 100:.2f}%)")
-        
-        # Step 5: 只保留最大连通域（过滤掉其他独立的聚类）
-        if keep_largest_only and len(selected_indices) > 0:
-            print(f"\n{'='*70}")
-            print(f"清理：只保留最大连通域")
-            print(f"{'='*70}")
-            
-            selected_positions = self.positions[selected_indices]
-            
-            # 使用DBSCAN聚类
-            print(f"运行DBSCAN聚类 (eps={cluster_eps}m, min_samples={cluster_min_samples})...")
-            clustering = DBSCAN(eps=cluster_eps, min_samples=cluster_min_samples).fit(selected_positions)
-            labels = clustering.labels_
-            
-            # 统计每个聚类的大小
-            unique_labels = np.unique(labels[labels >= 0])
-            
-            if len(unique_labels) > 0:
-                # 统计每个聚类的大小
-                label_counts = []
-                for label in unique_labels:
-                    count = (labels == label).sum()
-                    label_counts.append((label, count))
-                
-                # 按大小排序
-                label_counts.sort(key=lambda x: x[1], reverse=True)
-                
-                print(f"\n发现 {len(unique_labels)} 个连通域:")
-                for i, (label, count) in enumerate(label_counts[:5]):  # 显示前5个
-                    print(f"  域 {i+1} (label={label}): {count:,} 点")
-                
-                # 只保留最大的那个
-                largest_label = label_counts[0][0]
-                largest_mask = (labels == largest_label)
-                selected_indices = selected_indices[largest_mask]
-                
-                print(f"\n✅ 保留最大连通域: {len(selected_indices):,} 点")
-                
-                # 如果有多个较大的聚类，警告用户
-                if len(label_counts) > 1:
-                    second_largest_count = label_counts[1][1]
-                    if second_largest_count > len(selected_indices) * 0.1:  # 如果第二大的超过10%
-                        print(f"\n⚠️  注意: 发现第二大连通域 ({second_largest_count:,} 点)")
-                        print(f"   如果结果不对，可能需要调整参数或重新标注mask")
-            else:
-                print(f"⚠️ 没有找到有效聚类（全是噪声点）")
-        
-        print(f"\n{'='*70}")
-        print(f"最终选中点数: {len(selected_indices):,} / {self.num_points:,} "
-              f"({len(selected_indices) / self.num_points * 100:.2f}%)")
-        print(f"{'='*70}")
-        
-        # 投票分布
-        print(f"\n投票率分布:")
-        bins = [0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0]
-        for i in range(len(bins) - 1):
-            low, high = bins[i], bins[i+1]
-            count = ((vote_ratio >= low) & (vote_ratio < high)).sum()
-            print(f"  [{low*100:>3.0f}%-{high*100:>3.0f}%): {count:,} points")
         
         return selected_indices
     
@@ -323,6 +194,111 @@ class GaussianSegmenter:
         print(f"  点数: {len(selected_indices):,}")
 
 
+def _mask_dir_sort_key(path):
+    name = path.name
+    digits = "".join(ch for ch in name if ch.isdigit())
+    if digits:
+        return (0, int(digits))
+    return (1, name)
+
+
+def _resolve_mask_dirs(masks_path):
+    """解析mask目录，支持 mask0/mask1 子目录"""
+    masks_path = Path(masks_path)
+    candidate_dirs = [
+        p for p in masks_path.glob("mask*")
+        if p.is_dir() and p.name != "masks" and any(p.glob("*.png"))
+    ]
+    if not candidate_dirs and masks_path.name == "masks":
+        parent = masks_path.parent
+        candidate_dirs = [
+            p for p in parent.glob("mask*")
+            if p.is_dir() and p.name != "masks" and any(p.glob("*.png"))
+        ]
+        if candidate_dirs:
+            masks_path = parent
+    candidate_dirs = sorted(candidate_dirs, key=_mask_dir_sort_key)
+    if candidate_dirs:
+        return candidate_dirs
+    return [masks_path]
+
+
+
+
+def _compute_combined_score(segmenter):
+    vote_ratio = segmenter.vote_count / max(segmenter.total_views, 1)
+    if segmenter.mode == 'area_weighted':
+        max_weighted = segmenter.weighted_vote.max()
+        if max_weighted > 0:
+            weight_ratio = segmenter.weighted_vote / max_weighted
+        else:
+            weight_ratio = np.zeros_like(segmenter.weighted_vote)
+        combined_score = vote_ratio * 0.6 + weight_ratio * 0.4
+    else:
+        combined_score = vote_ratio
+    return combined_score
+
+
+
+
+def _process_mask_dir(segmenter, masks_dir, frames, fx, fy, cx, cy, width, height, args):
+    """处理单个mask目录，返回分数"""
+    masks_dir = Path(masks_dir)
+    mask_files = sorted(masks_dir.glob("*.png"))
+    print(f"找到 {len(mask_files)} 个mask文件")
+    
+    if len(mask_files) == 0:
+        print("❌ 错误: 没有找到mask文件！")
+        return None, 0
+    
+    processed = 0
+    
+    for mask_file in tqdm(mask_files, desc="处理进度"):
+        mask_name = mask_file.stem
+        
+        try:
+            mask_idx = int(mask_name)
+        except ValueError:
+            continue
+        
+        if mask_idx >= len(frames):
+            continue
+        
+        mask = cv2.imread(str(mask_file), cv2.IMREAD_GRAYSCALE)
+        if mask is None:
+            continue
+        
+        if mask.shape != (height, width):
+            mask = cv2.resize(mask, (width, height), interpolation=cv2.INTER_NEAREST)
+        
+        mask = mask > 127
+        
+        frame = frames[mask_idx]
+        c2w = np.array(frame['transform_matrix'], dtype=np.float32)
+        
+        segmenter.mark_with_mask(mask, c2w, fx, fy, cx, cy)
+        processed += 1
+
+    
+    print(f"\n实际处理帧数: {processed}")
+    
+    if processed == 0:
+        print("❌ 错误: 没有处理任何帧！")
+        return None, 0
+    
+    print(f"\n🔍 投票率统计（详细）:")
+    combined_score = _compute_combined_score(segmenter)
+
+    bins = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    print(f"综合分数分布:")
+    for i in range(len(bins) - 1):
+        low, high = bins[i], bins[i+1]
+        count = ((combined_score >= low) & (combined_score < high)).sum()
+        print(f"  [{low:.1f}-{high:.1f}): {count:,} points")
+    
+    return combined_score, processed
+
+
 def main():
     parser = ArgumentParser(description="用2D mask分割3D Gaussian点云")
     parser.add_argument("--ply", type=str, required=True)
@@ -335,23 +311,9 @@ def main():
                        choices=["vote", "area_weighted", "intersection"],
                        help="分割模式: vote | area_weighted(推荐) | intersection")
     
-    # 分区域阈值参数
-    parser.add_argument("--core-threshold", type=float, default=0.5,
-                       help="核心区域阈值(高置信度), 默认0.5")
-    parser.add_argument("--edge-threshold", type=float, default=0.2,
-                       help="边缘区域阈值(低置信度), 默认0.2")
-    parser.add_argument("--connectivity-radius", type=float, default=0.02,
-                       help="连通性半径(米), 边缘点必须在此距离内, 默认2cm")
-    
-    # 连通域过滤参数
-    parser.add_argument("--keep-largest-only", action="store_true", default=True,
-                       help="只保留最大连通域（默认开启）")
-    parser.add_argument("--no-keep-largest", dest="keep_largest_only", action="store_false",
-                       help="不过滤连通域，保留所有点")
-    parser.add_argument("--cluster-eps", type=float, default=0.02,
-                       help="DBSCAN聚类半径(米), 默认2cm")
-    parser.add_argument("--cluster-min-samples", type=int, default=10,
-                       help="DBSCAN最小样本数, 默认10")
+    # 分割参数
+    parser.add_argument("--core-threshold", type=float, default=0.3,
+                       help="阈值(高置信度), 默认0.3")
     
     # 双向输出
     parser.add_argument("--save-inverse", action="store_true",
@@ -377,13 +339,7 @@ def main():
     print(f"  PLY:        {args.output}")
     print(f"模式:         {args.mode}")
     print(f"核心阈值:     {args.core_threshold}")
-    print(f"边缘阈值:     {args.edge_threshold}")
-    print(f"连通半径:     {args.connectivity_radius}m")
-    print(f"最大连通域:   {'是' if args.keep_largest_only else '否'}")
-    print(f"保存背景:     {'是' if args.save_inverse else '否'}")
-    
-    # 加载Gaussian
-    segmenter = GaussianSegmenter(args.ply, mode=args.mode)
+    print(f"保存背景:     {'是' if args.save_inverse else '否(多mask会自动保存)'}")
     
     # 加载transforms.json
     print(f"\n{'='*70}")
@@ -408,109 +364,74 @@ def main():
     print(f"处理Masks")
     print(f"{'='*70}")
     
-    masks_dir = Path(args.masks)
     frames = transforms['frames']
+    mask_dirs = _resolve_mask_dirs(args.masks)
+    multiple_masks = len(mask_dirs) > 1
     
-    mask_files = sorted(masks_dir.glob("*.png"))
-    print(f"找到 {len(mask_files)} 个mask文件")
-    
-    if len(mask_files) == 0:
-        print("❌ 错误: 没有找到mask文件！")
-        return
-    
-    processed = 0
-    
-    for mask_file in tqdm(mask_files, desc="处理进度"):
-        mask_name = mask_file.stem
-        
-        try:
-            mask_idx = int(mask_name)
-        except ValueError:
-            continue
-        
-        if mask_idx >= len(frames):
-            continue
-        
-        # 加载mask
-        mask = cv2.imread(str(mask_file), cv2.IMREAD_GRAYSCALE)
-        if mask is None:
-            continue
-        
-        if mask.shape != (height, width):
-            mask = cv2.resize(mask, (width, height), interpolation=cv2.INTER_NEAREST)
-        
-        mask = mask > 127
-        
-        # 获取pose
-        frame = frames[mask_idx]
-        c2w = np.array(frame['transform_matrix'], dtype=np.float32)
-        
-        # 标记
-        segmenter.mark_with_mask(mask, c2w, fx, fy, cx, cy)
-        processed += 1
-    
-    print(f"\n实际处理帧数: {processed}")
-    
-    if processed == 0:
-        print("❌ 错误: 没有处理任何帧！")
-        return
-    
-    # 打印投票统计
-    print(f"\n🔍 投票率统计（详细）:")
-    vote_ratio = segmenter.vote_count / max(segmenter.total_views, 1)
-
-    if segmenter.mode == 'area_weighted':
-        max_weighted = segmenter.weighted_vote.max()
-        if max_weighted > 0:
-            weight_ratio = segmenter.weighted_vote / max_weighted
-        else:
-            weight_ratio = np.zeros_like(segmenter.weighted_vote)
-        combined_score = vote_ratio * 0.6 + weight_ratio * 0.4
-    else:
-        combined_score = vote_ratio
-
-    # 统计不同分数区间的点数
-    bins = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-    print(f"综合分数分布:")
-    for i in range(len(bins) - 1):
-        low, high = bins[i], bins[i+1]
-        count = ((combined_score >= low) & (combined_score < high)).sum()
-        print(f"  [{low:.1f}-{high:.1f}): {count:,} points")
-
-    # 获取分割结果
-    selected_indices = segmenter.get_segmented_points(
-        core_threshold=args.core_threshold,
-        edge_threshold=args.edge_threshold,
-        connectivity_radius=args.connectivity_radius,
-        keep_largest_only=args.keep_largest_only,
-        cluster_eps=args.cluster_eps,
-        cluster_min_samples=args.cluster_min_samples
-    )
-    
-    if len(selected_indices) == 0:
-        print("❌ 警告: 没有选中任何点！")
-        return
-    
-    # 可视化
-    if args.visualize:
-        segmenter.visualize_result(selected_indices, "Mask内的点")
-    
-    # 保存mask内的点
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    segmenter.save_segmented_ply(selected_indices, output_path)
+    output_stem = output_path.stem
+    output_suffix = output_path.suffix if output_path.suffix else ".ply"
     
-    # 保存mask外的点
-    if args.save_inverse:
-        all_indices = np.arange(segmenter.num_points)
-        inverse_indices = np.setdiff1d(all_indices, selected_indices)
+    union_selected = None
+    files_to_restore = []
+    segmenter_for_save = None
+    
+    for mask_dir in mask_dirs:
+        label = mask_dir.name if multiple_masks else "masks"
+        print(f"\n{'-'*60}")
+        print(f"处理Mask目录: {mask_dir}")
+        print(f"{'-'*60}")
         
-        inverse_output = output_path.parent / f"{output_path.stem}_background{output_path.suffix}"
+        segmenter = GaussianSegmenter(args.ply, mode=args.mode)
+        segmenter_for_save = segmenter
+        
+        combined_score, processed = _process_mask_dir(
+            segmenter, mask_dir, frames, fx, fy, cx, cy, width, height, args
+        )
+        if processed == 0 or combined_score is None:
+            continue
+        
+        selected_indices = segmenter.get_segmented_points(
+            core_threshold=args.core_threshold
+        )
+        
+        if len(selected_indices) == 0:
+            print("❌ 警告: 没有选中任何点！")
+            continue
         
         if args.visualize:
-            segmenter.visualize_result(inverse_indices, "Mask外的点（背景）")
+            segmenter.visualize_result(selected_indices, f"{label} 内的点")
         
-        segmenter.save_segmented_ply(inverse_indices, inverse_output)
+        if multiple_masks:
+            output_mask_path = output_path.parent / f"{output_stem}_{label}{output_suffix}"
+        else:
+            output_mask_path = output_path
+        
+        segmenter.save_segmented_ply(selected_indices, output_mask_path)
+        files_to_restore.append(output_mask_path)
+        
+        if union_selected is None:
+            union_selected = np.zeros(segmenter.num_points, dtype=bool)
+        union_selected[selected_indices] = True
+
+    
+    if union_selected is None or segmenter_for_save is None:
+        print("❌ 错误: 没有成功处理任何mask目录！")
+        return
+    
+    # 保存剩余主体（背景）
+    save_background = args.save_inverse or multiple_masks
+    if save_background:
+        all_indices = np.arange(segmenter_for_save.num_points)
+        inverse_indices = np.setdiff1d(all_indices, np.where(union_selected)[0])
+        inverse_output = output_path.parent / f"{output_stem}_background{output_suffix}"
+        
+        if args.visualize:
+            segmenter_for_save.visualize_result(inverse_indices, "Mask外的点（背景）")
+        
+        segmenter_for_save.save_segmented_ply(inverse_indices, inverse_output)
+        files_to_restore.append(inverse_output)
     
     # ========== 恢复Gaussian属性 ==========
     if args.restore_attributes:
@@ -520,11 +441,6 @@ def main():
         
         # 创建属性恢复器
         restorer = GaussianAttributeRestorer(args.ply, verbose=True)
-        
-        # 需要恢复的文件列表
-        files_to_restore = [output_path]
-        if args.save_inverse:
-            files_to_restore.append(inverse_output)
         
         # 批量恢复
         restored_paths = restorer.batch_restore(
@@ -538,6 +454,13 @@ def main():
         print(f"恢复后的文件:")
         for path in restored_paths:
             print(f"  - {path}")
+        
+        # 删除未恢复的原始ply
+        for path in files_to_restore:
+            try:
+                Path(path).unlink(missing_ok=True)
+            except Exception as e:
+                print(f"⚠️ 删除失败: {path} ({e})")
     
     print(f"\n{'='*70}")
     print(f"完成！")
