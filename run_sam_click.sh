@@ -18,8 +18,8 @@ OBJECT_NAME="$1"
 PROMPT="$2"
 START_FRAME="$3"  # 可选参数
 
-BASE_DIR="/home/jiziheng/Music/IROS2026/DRAWER/gs2colmap/ply_data"
-OBJECT_DIR="${BASE_DIR}/${OBJECT_NAME}"
+BASE_DIR="/home/cfy/cfy/ccc/gs_robot_world/src/gs_robot_world/assets/object_assets"
+OBJECT_DIR="${BASE_DIR}/${OBJECT_NAME}/render_output"
 IMAGES_DIR="${OBJECT_DIR}/images"
 OUTPUT_DIR="${OBJECT_DIR}/sam_results"
 
@@ -30,7 +30,7 @@ if [ ! -d "$IMAGES_DIR" ]; then
 fi
 
 # 构建命令
-CMD="python gs2colmap/sam3_video_click.py $IMAGES_DIR -o $OUTPUT_DIR --prompt \"$PROMPT\""
+CMD="python sam3_video_click.py $IMAGES_DIR -o $OUTPUT_DIR --prompt \"$PROMPT\""
 
 # 如果提供了start_frame参数，则添加
 if [ ! -z "$START_FRAME" ]; then

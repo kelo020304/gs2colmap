@@ -24,7 +24,7 @@ class InteractiveTrajectoryGenerator:
                  radius=1.0, height_offset=0.3, num_views=50,
                  clockwise=True, start_angle_deg=0.0):
         self.pcd_path = pcd_path
-        self.output_path = output_path
+        self.output_path = self._normalize_output_path(output_path)
         
         # 加载点云
         print(f"加载点云: {pcd_path}")
@@ -49,6 +49,14 @@ class InteractiveTrajectoryGenerator:
         # 可视化参数
         self.show_every = max(1, num_views // 20)  # 显示约20个相机
         self.frustum_scale = 0.15
+
+    def _normalize_output_path(self, output_path):
+        """规范化输出路径，确保父目录存在"""
+        output_path = Path(output_path)
+        if output_path.suffix == "":
+            output_path = output_path / "trajectory.json"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        return output_path
         
     def create_mujoco_c2w(self, pos, look_at, up=np.array([0, 0, 1])):
         """创建 MuJoCo C2W 矩阵"""
@@ -293,7 +301,6 @@ class InteractiveTrajectoryGenerator:
         
         # 保存
         output_path = Path(self.output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
         
         with open(output_path, 'w') as f:
             json.dump(output_data, f, indent=2)
@@ -305,7 +312,7 @@ class InteractiveTrajectoryGenerator:
         print(f"   半径: {self.radius:.3f}m")
         print(f"   高度偏移: {self.height_offset:.3f}m")
     
-    def run(self):
+    def run(self, auto_center=False, no_vis=False):
         """运行交互式可视化"""
         print("\n" + "=" * 70)
         print("交互式相机轨迹生成器")
@@ -317,43 +324,52 @@ class InteractiveTrajectoryGenerator:
         print(f"  旋转方向: {'顺时针' if self.clockwise else '逆时针'}")
         print(f"  起始角度: {self.start_angle_deg}°")
         print("=" * 70)
-        print("\n步骤 1: 选择中心点")
-        print("  - 使用 Shift+左键 点击点云选择中心点")
-        print("  - 关闭窗口继续")
-        print("=" * 70)
-        
-        # 第一步：选择中心点
-        vis_pick = o3d.visualization.VisualizerWithEditing()
-        vis_pick.create_window(
-            window_name="步骤 1: Shift+左键选择中心点",
-            width=1600,
-            height=1000
-        )
-        self.pcd.paint_uniform_color([1, 0, 0])
-        vis_pick.add_geometry(self.pcd)
-        
-        # 添加世界坐标系
-        world_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-            size=0.5, origin=[0, 0, 0]
-        )
-        vis_pick.add_geometry(world_frame)
-        
-        vis_pick.run()
-        
-        # 获取选择的点
-        picked_points = vis_pick.get_picked_points()
-        vis_pick.destroy_window()
-        
-        if not picked_points:
-            print("没有选择点，退出")
-            return
-        
-        # 获取中心点
-        points = np.asarray(self.pcd.points)
-        idx = picked_points[0]
-        self.center = points[idx].copy()
-        
-        print(f"\n✅ 选择中心点: [{self.center[0]:.3f}, {self.center[1]:.3f}, {self.center[2]:.3f}]")
+        if auto_center:
+            points = np.asarray(self.pcd.points)
+            if points.size == 0:
+                print("点云为空，无法计算中心点")
+                return
+            self.center = points.mean(axis=0)
+            print("\n步骤 1: 自动中心点")
+            print(f"✅ 点云中心: [{self.center[0]:.3f}, {self.center[1]:.3f}, {self.center[2]:.3f}]")
+        else:
+            print("\n步骤 1: 选择中心点")
+            print("  - 使用 Shift+左键 点击点云选择中心点")
+            print("  - 关闭窗口继续")
+            print("=" * 70)
+            
+            # 第一步：选择中心点
+            vis_pick = o3d.visualization.VisualizerWithEditing()
+            vis_pick.create_window(
+                window_name="步骤 1: Shift+左键选择中心点",
+                width=1600,
+                height=1000
+            )
+            self.pcd.paint_uniform_color([1, 0, 0])
+            vis_pick.add_geometry(self.pcd)
+            
+            # 添加世界坐标系
+            world_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+                size=0.5, origin=[0, 0, 0]
+            )
+            vis_pick.add_geometry(world_frame)
+            
+            vis_pick.run()
+            
+            # 获取选择的点
+            picked_points = vis_pick.get_picked_points()
+            vis_pick.destroy_window()
+            
+            if not picked_points:
+                print("没有选择点，退出")
+                return
+            
+            # 获取中心点
+            points = np.asarray(self.pcd.points)
+            idx = picked_points[0]
+            self.center = points[idx].copy()
+            
+            print(f"\n✅ 选择中心点: [{self.center[0]:.3f}, {self.center[1]:.3f}, {self.center[2]:.3f}]")
         
         # 第二步：生成轨迹
         print("\n" + "=" * 70)
@@ -372,7 +388,8 @@ class InteractiveTrajectoryGenerator:
         print("步骤 3: 可视化轨迹和相机位姿")
         print("=" * 70)
         
-        self.visualize_trajectory(poses)
+        if not no_vis:
+            self.visualize_trajectory(poses)
         
         # 第四步：保存
         self.save_trajectory(poses)
@@ -399,7 +416,7 @@ def main():
                        help="环绕半径（米）")
     parser.add_argument("--height", type=float, default=0.1,
                        help="相机高度偏移（米）")
-    parser.add_argument("--start-angle", type=float, default=0.0,
+    parser.add_argument("--start-angle", type=float, default=270.0,
                        help="起始角度（度），0=前方, 90=左侧, 180=后方, 270=右侧")
     parser.add_argument("--counterclockwise", action="store_true",
                        help="逆时针旋转（默认顺时针）")
@@ -409,6 +426,10 @@ def main():
                        help="渲染高度")
     parser.add_argument("--fovy", type=float, default=65.0,
                        help="垂直 FOV（角度）")
+    parser.add_argument("--auto-center", action="store_true",
+                       help="使用点云中心点（非交互）")
+    parser.add_argument("--no-vis", action="store_true",
+                       help="不显示可视化窗口")
     
     args = parser.parse_args()
     
@@ -426,7 +447,7 @@ def main():
     generator.height = args.img_height
     generator.fovy_deg = args.fovy
     
-    generator.run()
+    generator.run(auto_center=args.auto_center, no_vis=args.no_vis)
 
 
 if __name__ == "__main__":

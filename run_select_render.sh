@@ -2,11 +2,12 @@
 source ~/anaconda3/etc/profile.d/conda.sh
 conda activate drawer_sdf
 # 设置输入参数
-OBJECT_NAME="chest_of_drawers"
-BASE_DIR="/home/jiziheng/Music/IROS2026/DRAWER/gs2colmap/ply_data"
-OBJECT_DIR="${BASE_DIR}/${OBJECT_NAME}"
+OBJECT_NAME="drawer_cabinet"
+BASE_DIR="/home/cfy/cfy/ccc/gs_robot_world/src/gs_robot_world/assets/object_assets"
+OBJECT_DIR="${BASE_DIR}/${OBJECT_NAME}/rec_3d/${OBJECT_NAME}"
 PLY_FILE="${OBJECT_DIR}/${OBJECT_NAME}.ply"
-TRAJ_FILE="${OBJECT_DIR}/traj.json"
+OUTPUT_FILE="${BASE_DIR}/${OBJECT_NAME}/render_output"
+TRAJ_FILE="${BASE_DIR}/${OBJECT_NAME}/render_output/traj.json"
 
 # 检查PLY文件是否存在
 if [ ! -f "$PLY_FILE" ]; then
@@ -18,9 +19,11 @@ fi
 echo "========================================"
 echo "Step 1: 选择物体"
 echo "========================================"
-python gs2colmap/select_object.py \
+python select_object.py \
     --ply "$PLY_FILE" \
-    --output "$TRAJ_FILE"
+    --output "$TRAJ_FILE" \
+    --auto-center \
+    --no-vis
 
 # 检查是否成功生成轨迹文件
 if [ ! -f "$TRAJ_FILE" ]; then
@@ -33,10 +36,10 @@ echo ""
 echo "========================================"
 echo "Step 2: 渲染"
 echo "========================================"
-python gs2colmap/render.py \
+python render.py \
     --ply "$PLY_FILE" \
     --trajectory "$TRAJ_FILE" \
-    --output "$OBJECT_DIR" \
+    --output "$OUTPUT_FILE" \
     --width 640 \
     --height 480 \
     --fovy 65.0
