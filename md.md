@@ -14,6 +14,15 @@ python gs2colmap/sam3_video_debug.py gs2colmap/ply_data/microwave/images -o gs2c
     --prompt "washing machine door" \
     --start-frame 13 
 
+python visualize_axis.py \
+  --ply /home/jiziheng/Music/IROS2026/gs2colmap/assets/object_assets/globe_with_stand/render_output/globe_with_stand_seg_background_clean.ply \
+  --axis-json /home/jiziheng/Music/IROS2026/gs2colmap/assets/object_assets/globe_with_stand/render_output/globe_with_stand_seg_axis.json
+
+python visualize_axis.py \
+  --ply /home/jiziheng/Music/IROS2026/gs2colmap/assets/object_assets/laptop/render_output/laptop_seg_gs.ply \
+  --axis-json /home/jiziheng/Music/IROS2026/gs2colmap/assets/object_assets/laptop/render_output/laptop_seg_axis.json
+
+
 
 python sam3_video_debug.py images -o results \
     --prompt " door" 

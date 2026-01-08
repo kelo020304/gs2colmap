@@ -16,6 +16,7 @@ fi
 
 OBJECT_NAME="$1"
 MODE="${2:-vote}"  # 默认vote模式
+PROMPT_TEXT="${PROMPT_TEXT:-}"
 
 BASE_DIR="/home/jiziheng/Music/IROS2026/gs2colmap/assets/object_assets"
 OBJECT_DIR="${BASE_DIR}/${OBJECT_NAME}/render_output"
@@ -47,8 +48,9 @@ CMD="python segment_gaussian.py \
     --transforms $TRANSFORMS_FILE \
     --output $OUTPUT_FILE \
     --mode $MODE \
+    --prompt \"$PROMPT_TEXT\" \
     --save-inverse \
-    --core-threshold 0.4 \
+    --core-threshold 0.5 \
     --restore-attributes"
 
 # 执行命令

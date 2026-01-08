@@ -30,7 +30,7 @@ if [ ! -d "$IMAGES_DIR" ]; then
 fi
 
 # 构建命令
-CMD="python sam3_video_click.py $IMAGES_DIR -o $OUTPUT_DIR --prompt \"$PROMPT\""
+CMD="python sam3_video_click.py $IMAGES_DIR -o $OUTPUT_DIR --prompt \"$PROMPT\" --no-interaction"
 
 # 如果提供了start_frame参数，则添加
 if [ ! -z "$START_FRAME" ]; then

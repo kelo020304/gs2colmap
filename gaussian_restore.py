@@ -218,11 +218,11 @@ class GaussianAttributeRestorer:
             
             output_paths.append(result_path)
         
-        if self.verbose:
-            print(f"\n{'='*70}")
-            print(f"批量处理完成")
-            print(f"{'='*70}")
-            print(f"成功处理: {len(output_paths)} 个文件")
+        # if self.verbose:
+        #     print(f"\n{'='*70}")
+        #     print(f"批量处理完成")
+        #     print(f"{'='*70}")
+        #     print(f"成功处理: {len(output_paths)} 个文件")
         
         return output_paths
 

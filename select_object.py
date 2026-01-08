@@ -349,18 +349,18 @@ class InteractiveTrajectoryGenerator:
                 print("点云为空，无法计算中心点")
                 return
             self.center = points.mean(axis=0)
-            print("\n步骤 1: 自动中心点")
+            # print("\n步骤 1: 自动中心点")
             print(f"✅ 点云中心: [{self.center[0]:.3f}, {self.center[1]:.3f}, {self.center[2]:.3f}]")
         else:
-            print("\n步骤 1: 选择中心点")
+            # print("\n步骤 1: 选择中心点")
             print("  - 使用 Shift+左键 点击点云选择中心点")
-            print("  - 关闭窗口继续")
-            print("=" * 70)
+            # print("  - 关闭窗口继续")
+            # print("=" * 70)
             
             # 第一步：选择中心点
             vis_pick = o3d.visualization.VisualizerWithEditing()
             vis_pick.create_window(
-                window_name="步骤 1: Shift+左键选择中心点",
+                window_name=" Shift+左键选择中心点",
                 width=1600,
                 height=1000
             )
@@ -391,21 +391,21 @@ class InteractiveTrajectoryGenerator:
             print(f"\n✅ 选择中心点: [{self.center[0]:.3f}, {self.center[1]:.3f}, {self.center[2]:.3f}]")
         
         # 第二步：生成轨迹
-        print("\n" + "=" * 70)
-        print("步骤 2: 生成轨迹")
-        print("=" * 70)
+        # print("\n" + "=" * 70)
+        # print("步骤 2: 生成轨迹")
+        # print("=" * 70)
         
         poses = self.generate_trajectory()
         if poses is None:
             print("❌ 生成轨迹失败")
             return
         
-        print(f"✅ 生成 {len(poses)} 个相机位姿")
+        # print(f"✅ 生成 {len(poses)} 个相机位姿")
         
         # 第三步：可视化
-        print("\n" + "=" * 70)
-        print("步骤 3: 可视化轨迹和相机位姿")
-        print("=" * 70)
+        # print("\n" + "=" * 70)
+        # # print("步骤 3: 可视化轨迹和相机位姿")
+        # print("=" * 70)
         
         if not no_vis:
             self.visualize_trajectory(poses)
@@ -413,11 +413,11 @@ class InteractiveTrajectoryGenerator:
         # 第四步：保存
         self.save_trajectory(poses)
         
-        print("\n现在可以渲染:")
+        # print("\n现在可以渲染:")
         print(f"python gs2colmap/render.py \\")
         print(f"    --ply {self.pcd_path} \\")
-        print(f"    --trajectory {self.output_path} \\")
-        print(f"    --output gs2colmap/renders/custom \\")
+        # print(f"    --trajectory {self.output_path} \\")
+        # print(f"    --output gs2colmap/renders/custom \\")
         print(f"    --fovy {self.fovy_deg}")
         
         print("\n👋 完成！")
@@ -431,11 +431,11 @@ def main():
                        help="输出轨迹文件")
     parser.add_argument("--num-views", type=int, default=40,
                        help="视角数量")
-    parser.add_argument("--radius", type=float, default=1.0,
+    parser.add_argument("--radius", type=float, default=1.2,
                        help="环绕半径（米）")
-    parser.add_argument("--height", type=float, default=0.1,
+    parser.add_argument("--height", type=float, default=0.05,
                        help="相机高度偏移（米）")
-    parser.add_argument("--elevation", type=float, default=45.0,
+    parser.add_argument("--elevation", type=float, default=0.0,
                        help="单圈仰角（度），默认45")
     parser.add_argument("--elevation-min", type=float, default=None,
                        help="仰角下限（度），用于多圈")

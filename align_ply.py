@@ -123,6 +123,19 @@ def write_transformed_ply(source_ply, output_ply, scale_vec, translation):
     print(f"✅ Saved aligned PLY (with attributes): {out_path}")
 
 
+def write_transformed_obj(source_obj, output_obj, scale_vec, translation):
+    mesh = o3d.io.read_triangle_mesh(source_obj)
+    if mesh.is_empty():
+        raise RuntimeError("OBJ为空")
+    verts = np.asarray(mesh.vertices).astype(np.float32)
+    verts = verts * scale_vec + translation
+    mesh.vertices = o3d.utility.Vector3dVector(verts)
+    out_path = Path(output_obj)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    o3d.io.write_triangle_mesh(str(out_path), mesh)
+    print(f"✅ Saved aligned OBJ: {out_path}")
+
+
 def rotation_matrix_to_quat_wxyz(R):
     """将3x3旋转矩阵转换为四元数(w,x,y,z)"""
     trace = np.trace(R)
@@ -164,6 +177,8 @@ def main():
     parser.add_argument("--target", required=True, help="目标PLY(红色)")
     parser.add_argument("--output", required=True, help="输出PLY")
     parser.add_argument("--voxel", type=float, default=0.002, help="下采样体素大小")
+    parser.add_argument("--align-obj", action="store_true",
+                        help="同时对齐同名OBJ(与source同目录)")
     parser.add_argument("--output-json", default="", help="输出对齐参数JSON(可选)")
     args = parser.parse_args()
     
@@ -184,6 +199,13 @@ def main():
     translation = T[:3, 3].astype(np.float32)
     
     write_transformed_ply(args.source, args.output, scale_vec, translation)
+    if args.align_obj:
+        source_obj = str(Path(args.source).with_suffix(".obj"))
+        output_obj = str(Path(args.output).with_suffix(".obj"))
+        if Path(source_obj).is_file():
+            write_transformed_obj(source_obj, output_obj, scale_vec, translation)
+        else:
+            print(f"⚠️ OBJ不存在: {source_obj}")
     
     if args.output_json:
         out_json = Path(args.output_json)

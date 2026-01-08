@@ -32,9 +32,9 @@ def safe_overlay(img, mask):
 
 
 def _find_sub_drawers_mask_dir(video_dir):
-    """从视频目录向上查找 sub_drawers_masks 目录"""
+    """从视频目录向上查找 sub_item_masks 目录"""
     for parent in [video_dir] + list(video_dir.parents):
-        candidate = parent / "sub_drawers_masks"
+        candidate = parent / "sub_item_masks"
         if candidate.is_dir():
             return candidate
     return None
@@ -141,7 +141,7 @@ def _compute_greedy_mapping(ref_centroids, sam_centroids):
 
 
 def add_prompts_from_drawer_masks(predictor, session_id, frame_idx, frame_path, text_prompt, video_dir):
-    """从 sub_drawers_masks 自动生成多对象 prompts"""
+    """从 sub_item_masks 自动生成多对象 prompts"""
     mask_dir = _find_sub_drawers_mask_dir(video_dir)
     if mask_dir is None:
         return 0
@@ -797,6 +797,8 @@ def main():
     parser.add_argument("video_dir")
     parser.add_argument("-o", "--output", required=True)
     parser.add_argument("--prompt", required=True)
+    parser.add_argument("--no-interaction", action="store_true",
+                        help="无交互模式，只有文本prompt")
     parser.add_argument("--start-frame", type=int, default=0)
     parser.add_argument("--video-fps", type=int, default=30)
     args = parser.parse_args()
@@ -836,25 +838,43 @@ def main():
     )
     
     if num_objects == 0:
-        # 交互式编辑
-        editor = MultiObjectMaskEditor(
-            predictor,
-            session_id,
-            args.start_frame,
-            frames[args.start_frame],
-            args.prompt
-        )
-        
-        # 生成初始mask
-        print(f"🎯 Generating initial mask with text: '{args.prompt}'...")
-        editor.generate_initial_mask()
-        
-        # 显示并标注多个对象
-        num_objects = editor.show()
-        
-        if num_objects is None:
-            print("Cancelled")
-            return
+        if args.no_interaction:
+            print(f"🎯 No-interaction: add text prompt '{args.prompt}'")
+            response = predictor.handle_request(
+                request=dict(
+                    type="add_prompt",
+                    session_id=session_id,
+                    frame_index=args.start_frame,
+                    object_id=0,
+                    text=args.prompt,
+                )
+            )
+            outputs = response.get("outputs", {})
+            if "out_binary_masks" in outputs and outputs["out_binary_masks"].shape[0] > 0:
+                num_objects = 1
+            else:
+                print("❌ No masks from text prompt")
+                return
+        else:
+            # 交互式编辑
+            editor = MultiObjectMaskEditor(
+                predictor,
+                session_id,
+                args.start_frame,
+                frames[args.start_frame],
+                args.prompt
+            )
+            
+            # 生成初始mask
+            print(f"🎯 Generating initial mask with text: '{args.prompt}'...")
+            editor.generate_initial_mask()
+            
+            # 显示并标注多个对象
+            num_objects = editor.show()
+            
+            if num_objects is None:
+                print("Cancelled")
+                return
     else:
         print(f"✅ Auto-added {num_objects} drawer object(s), skip interaction")
 
