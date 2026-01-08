@@ -123,6 +123,41 @@ def write_transformed_ply(source_ply, output_ply, scale_vec, translation):
     print(f"✅ Saved aligned PLY (with attributes): {out_path}")
 
 
+def rotation_matrix_to_quat_wxyz(R):
+    """将3x3旋转矩阵转换为四元数(w,x,y,z)"""
+    trace = np.trace(R)
+    if trace > 0.0:
+        s = 0.5 / np.sqrt(trace + 1.0)
+        w = 0.25 / s
+        x = (R[2, 1] - R[1, 2]) * s
+        y = (R[0, 2] - R[2, 0]) * s
+        z = (R[1, 0] - R[0, 1]) * s
+    else:
+        if R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
+            s = 2.0 * np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2])
+            w = (R[2, 1] - R[1, 2]) / s
+            x = 0.25 * s
+            y = (R[0, 1] + R[1, 0]) / s
+            z = (R[0, 2] + R[2, 0]) / s
+        elif R[1, 1] > R[2, 2]:
+            s = 2.0 * np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2])
+            w = (R[0, 2] - R[2, 0]) / s
+            x = (R[0, 1] + R[1, 0]) / s
+            y = 0.25 * s
+            z = (R[1, 2] + R[2, 1]) / s
+        else:
+            s = 2.0 * np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1])
+            w = (R[1, 0] - R[0, 1]) / s
+            x = (R[0, 2] + R[2, 0]) / s
+            y = (R[1, 2] + R[2, 1]) / s
+            z = 0.25 * s
+    quat = np.array([w, x, y, z], dtype=np.float32)
+    norm = np.linalg.norm(quat)
+    if norm > 0:
+        quat /= norm
+    return quat.tolist()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", required=True, help="待对齐PLY(蓝色)")
@@ -153,9 +188,14 @@ def main():
     if args.output_json:
         out_json = Path(args.output_json)
         out_json.parent.mkdir(parents=True, exist_ok=True)
+        R = T[:3, :3].copy()
+        for axis in range(3):
+            if abs(scale_vec[axis]) > 1e-8:
+                R[:, axis] /= scale_vec[axis]
+        quat = rotation_matrix_to_quat_wxyz(R)
         payload = {
             "translation": translation.tolist(),
-            "rotation": [1.0, 0.0, 0.0, 0.0],
+            "rotation": quat,
         }
         with open(out_json, "w") as f:
             json.dump(payload, f, indent=2)
