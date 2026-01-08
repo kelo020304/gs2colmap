@@ -3,10 +3,11 @@
 对齐两个PLY：估计尺度+位姿并输出变换后的源PLY
 """
 import argparse
+import json
 from pathlib import Path
 import numpy as np
 import open3d as o3d
-from gaussian_restore import GaussianAttributeRestorer
+from plyfile import PlyData, PlyElement
 
 
 def _pca_basis(points):
@@ -95,16 +96,40 @@ def compute_align_transform(src, tgt):
     return T
 
 
+def write_transformed_ply(source_ply, output_ply, scale_vec, translation):
+    ply = PlyData.read(source_ply)
+    verts = ply['vertex'].data
+    coords = np.stack([verts['x'], verts['y'], verts['z']], axis=-1).astype(np.float32)
+    new_coords = coords * scale_vec + translation
+    
+    new_data = np.empty(len(verts), dtype=verts.dtype)
+    for name in verts.dtype.names:
+        if name == 'x':
+            new_data[name] = new_coords[:, 0]
+        elif name == 'y':
+            new_data[name] = new_coords[:, 1]
+        elif name == 'z':
+            new_data[name] = new_coords[:, 2]
+        elif name in ['scale_0', 'scale_1', 'scale_2']:
+            axis = int(name.split('_')[1])
+            new_data[name] = verts[name] + np.log(scale_vec[axis])
+        else:
+            new_data[name] = verts[name]
+    
+    out_path = Path(output_ply)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    el = PlyElement.describe(new_data, 'vertex')
+    PlyData([el], text=False).write(out_path)
+    print(f"✅ Saved aligned PLY (with attributes): {out_path}")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", required=True, help="待对齐PLY(蓝色)")
     parser.add_argument("--target", required=True, help="目标PLY(红色)")
     parser.add_argument("--output", required=True, help="输出PLY")
     parser.add_argument("--voxel", type=float, default=0.002, help="下采样体素大小")
-    parser.add_argument("--restore-attributes", action="store_true",
-                        help="恢复Gaussian属性")
-    parser.add_argument("--restore-max-distance", type=float, default=0.001,
-                        help="属性恢复最大匹配距离(米), 默认1mm")
+    parser.add_argument("--output-json", default="", help="输出对齐参数JSON(可选)")
     args = parser.parse_args()
     
     src = o3d.io.read_point_cloud(str(args.source))
@@ -120,24 +145,21 @@ def main():
     tgt_clean, _ = tgt_down.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
     
     T = compute_align_transform(src_clean, tgt_clean)
-    src.transform(T)
+    scale_vec = np.diag(T[:3, :3]).astype(np.float32)
+    translation = T[:3, 3].astype(np.float32)
     
-    out_path = Path(args.output)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    o3d.io.write_point_cloud(str(out_path), src)
-    print(f"✅ Saved aligned PLY: {out_path}")
+    write_transformed_ply(args.source, args.output, scale_vec, translation)
     
-    if args.restore_attributes:
-        print("\n恢复 Gaussian Splatting 属性...")
-        restorer = GaussianAttributeRestorer(args.source, verbose=True)
-        restored_paths = restorer.batch_restore(
-            [out_path],
-            suffix="_gs",
-            max_distance=args.restore_max_distance,
-            overwrite=True
-        )
-        for path in restored_paths:
-            print(f"✅ 已保存带属性PLY: {path}")
+    if args.output_json:
+        out_json = Path(args.output_json)
+        out_json.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "translation": translation.tolist(),
+            "rotation": [1.0, 0.0, 0.0, 0.0],
+        }
+        with open(out_json, "w") as f:
+            json.dump(payload, f, indent=2)
+        print(f"✅ Saved JSON: {out_json}")
 
 
 if __name__ == "__main__":
